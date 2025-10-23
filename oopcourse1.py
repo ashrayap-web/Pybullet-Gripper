@@ -12,31 +12,43 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.resetSimulation()
 p.setGravity(0, 0, -10)
 p.setRealTimeSimulation(0)
+
 # Plane
 p.loadURDF("plane.urdf")
 
+# camera settings
+p.resetDebugVisualizerCamera(
+    cameraDistance=1.0,
+    cameraYaw=50,
+    cameraPitch=-35,
+    cameraTargetPosition=[0, 0, 0.2]
+)
 
+# TEST - improve solver
+p.setPhysicsEngineParameter(numSolverIterations=300, erp=0.3, contactERP=0.3)
 
 class SimObject:
 
-    def __init__(self, urdf_file=None, pos=None, orientation=None):
-
-
-        #self.pos, _ = p.getBasePositionAndOrientation(self.body_id)
+    def __init__(self, name, urdf_file=None, pos=None, orientation=None):
+       
+        self.name = name
         self.pos = pos
         self.orientation = orientation
 
         self.body_id = p.loadURDF(urdf_file, basePosition=self.pos, baseOrientation=self.orientation)
 
+        self.pos_grab_before = None
+        self.pos_grab_after = None
 
 class CubeObject(SimObject):
-    def __init__(self, urdf_file="cube_small.urdf", pos=None, orientation=None):
-        super().__init__(urdf_file, pos, orientation)
+    def __init__(self, name, urdf_file="cube_small.urdf", pos=None, orientation=None):
+        super().__init__(name, urdf_file, pos, orientation)
 
 
 class SphereObject(SimObject):
-    def __init__(self, urdf_file="sphere.urdf", pos=None, orientation=None):
-        super().__init__(urdf_file, pos, orientation)
+    def __init__(self, name, urdf_file="sphere.urdf", pos=None, orientation=None):
+        super().__init__(name, urdf_file, pos, orientation)
+
 
 
 class SimGripper:
@@ -44,23 +56,21 @@ class SimGripper:
     def __init__(self, urdf_file, pos=None, orientation=None, target_obj=None):
 
         #self.pos = pos ## is needed???
+       
         self.OBJ = target_obj
 
-        self.head_offset = [0.2, 0, 0]
-
         if pos is None:
-            self.start_pos = [random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(0.3, 1)]
+            self.start_pos = [random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(0.4, 1)]
         else:
             self.start_pos = pos
 
-        base_pos = [self.start_pos[i]-self.head_offset[i] for i in range(3)]
        
         if orientation is None:
             self.orientation = self.set_orientation()
         else:
             self.orientation = orientation
 
-        self.body_id = p.loadURDF(urdf_file, basePosition=base_pos, baseOrientation=self.orientation)
+        self.body_id = p.loadURDF(urdf_file, basePosition=self.start_pos, baseOrientation=self.orientation)
 
         # Fix gripper with a constraint
         self.pr2_cid = p.createConstraint(
@@ -70,26 +80,38 @@ class SimGripper:
             childLinkIndex=-1,
             jointType=p.JOINT_FIXED,
             jointAxis=[0, 0, 0],
-            parentFramePosition=[0.2,0,0],#self.head_offset, # 0.2 to change base pos to gripper head?
+            parentFramePosition=[0,0,0],
             childFramePosition= self.start_pos,
             parentFrameOrientation = [0,0,0,1],
             childFrameOrientation = self.orientation
         )
 
-   
-    def get_head_pos(self):
-        
-        base_pos, _ = p.getBasePositionAndOrientation(self.body_id)
-        return np.array(base_pos) + np.array([0.2, 0, 0])
+        self.grab_start_pos = None
+        self.grab_end_pos = None
+
 
     def set_orientation(self):
 
-        d_vector = np.array(self.OBJ.pos) - np.array(self.start_pos) # vector from gripper to obj
+        obj_pos, _ = p.getBasePositionAndOrientation(self.OBJ.body_id)
+
+        d_vector = np.array(obj_pos) - np.array(self.start_pos) # vector from gripper to obj
         dx, dy, dz = d_vector
 
-        yaw = np.atan2(dy, dx)
-        pitch = np.atan2(-dz, np.sqrt(dx**2 + dy**2))
-        roll = 0
+       
+        if np.abs(dx) and np.abs(dy) < 1e-3:
+            roll = -np.pi/2
+            yaw = 0
+            pitch = np.pi/2
+
+        else:
+            yaw = np.atan2(dy, dx)
+            pitch = np.atan2(-dz, np.sqrt(dx**2 + dy**2))
+            roll = 0
+
+        yaw += random.uniform(-np.pi/36, np.pi/36) # 5deg
+        pitch += random.uniform(-np.pi/36, np.pi/36)
+
+        #print(f"roll {roll}, pitch {pitch}, yaw {yaw}")
 
         return p.getQuaternionFromEuler([roll, pitch, yaw])
 
@@ -97,13 +119,14 @@ class SimGripper:
     # ------------------- Helper Functions ------------------- #
     def close_gripper(self):
         for joint in [0,2]:
-            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=1, force=10)
+            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=2, force=10)
 
     def open_gripper(self):
         for joint in [0,2]:
-            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.55, maxVelocity=1, force=10)
+            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.95, maxVelocity=1, force=10)
 
-    def move_gripper(self, x, y, z, force=30):
+
+    def move_gripper(self, x, y, z, force=80):
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
         p.changeConstraint(
             self.pr2_cid,
@@ -115,136 +138,142 @@ class SimGripper:
 
 
     def move_towards_obj(self):
-        min_dist = 0.085
-        speed = 0.005  
+       
+        min_dist = 0.30
+        z_offset = 0.005 #0.01
 
-        # Get the final target position
-        obj_pos_final, _ = p.getBasePositionAndOrientation(self.OBJ.body_id)
-        obj_pos_final = np.array(obj_pos_final)
-        
-        initial_pos = self.get_head_pos()
+        #obj_pos = np.array(self.OBJ.pos)
+        obj_pos, _ = p.getBasePositionAndOrientation(self.OBJ.body_id)
+        obj_pos = np.array(obj_pos)
+        obj_pos[2] += z_offset
 
-        # Re-orient towards the object just before moving to ensure accuracy
-        d_vector = obj_pos_final - initial_pos
-        dx, dy, dz = d_vector
-        yaw = np.atan2(dy, dx)
-        pitch = np.atan2(-dz, np.sqrt(dx**2 + dy**2))
-        self.orientation = p.getQuaternionFromEuler([0, pitch, yaw])
+        curr_pos, _ = p.getBasePositionAndOrientation(self.body_id)
 
-        # The final stopping point
-        direction = d_vector / np.linalg.norm(d_vector)
-        final_pos = obj_pos_final - min_dist * direction
+        #dist = np.linalg.norm(obj_pos - np.array(curr_pos))
 
-        # The vector for the entire move
-        move_vector = final_pos - initial_pos
-        travel_distance = np.linalg.norm(move_vector)
+        d_vector = obj_pos - curr_pos
+        d_unit_vector = d_vector / np.linalg.norm(d_vector)
 
-        # Calculate the number of steps needed based on a constant speed
-        num_steps = int(travel_distance / speed)
-        if num_steps == 0:
-            return 
+        pos_step = obj_pos - min_dist *(d_unit_vector)  # direction vector
 
-        # Move in small increments of constant size
-        for i in range(1, num_steps + 1):
-            # Calculate the next intermediate position
-            step_pos = initial_pos + (move_vector * (i / num_steps))
-            
-            self.move_gripper(step_pos[0], step_pos[1], step_pos[2], force=50)
-            
-            p.stepSimulation()
-            time.sleep(1./240.)
+        self.move_gripper(pos_step[0], pos_step[1], pos_step[2], force=1000)
 
 
+    def is_success(self):
+        start_pos_cube = np.array(self.OBJ.pos_grab_before)
+        end_pos_cube = np.array(self.OBJ.pos_grab_after)
+
+        dist_diff_vec = (np.array(self.grab_end_pos) - np.array(self.grab_start_pos)) - (end_pos_cube - start_pos_cube)
+        #dist_diff = np.linalg.norm(dist_diff_vec)
+        dist_diff = dist_diff_vec[2]  # height
+
+        if dist_diff < 0.01:
+            print(f"\033[32m{self.OBJ.name}: SUCCESS\033[0m")
+        else:
+            print(f"\033[31m{self.OBJ.name}: FAILURE\033[0m")
 
 
-
-
-
-#------ CUBE -----------#
-cube_height = 0.05 
-base_x, base_y = 0.0, 0.0
-
-base_z = 0.025 + cube_height  
-#cube_start_pos = [base_x, base_y, base_z]
-cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-
-
-CUBE = CubeObject(pos=[0,0,0.025], orientation=cube_start_orientation)
-
-
-# ------------------- PR2 Gripper ------------------- #
-
-gripper_start_pos = [-1.5, 3.5, 2.3]
-#gripper_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-
-pr2_gripper = SimGripper("pr2_gripper.urdf", pos=gripper_start_pos, target_obj=CUBE)
-
-
-
-# Open fingers initially
-joint_positions = [0.550569, 0.0, 0.549657, 0.0]
-for i, pos in enumerate(joint_positions):
-    p.resetJointState(pr2_gripper.body_id, i, pos)
-
-
-
-
-# ------------------- Pick CUBE ------------------- #
-
-
-# Open gripper
-pr2_gripper.open_gripper()
-for _ in range(150):
-    p.stepSimulation()
-    time.sleep(1./240.)
-
-cube_pos, _ = p.getBasePositionAndOrientation(CUBE.body_id)
-cube_x, cube_y, cube_z = cube_pos
-
-#grasp_height = cube_z + 0.1
-
-# The move function now handles its own simulation steps at a constant speed
-pr2_gripper.move_towards_obj()
-
-
-# Close gripper to grasp
-pr2_gripper.close_gripper()
-for _ in range(300):
-    p.stepSimulation()
-    time.sleep(1./240.)
-
-
-# Lift cube
-gripper_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
-x, y, z = cube_pos
-lift_height = z + 0.5
-
-pr2_gripper.move_gripper(x, y, lift_height)
-for _ in range(200):
-    p.stepSimulation()
-    time.sleep(1./240.)
-
+## ------ UTILITY ------##
 '''
-p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
-p.changeConstraint(
-    pr2_gripper.pr2_cid,
-    jointChildPivot=[cube_x, cube_y, lift_height],
-    jointChildFrameOrientation = pr2_gripper.orientation,
-    maxForce=50
-)
-p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
+def spawn_marker(position, scale=0.01, color=[0, 0, 0, 1]):
+    if position:
+        visual_shape = p.createVisualShape(
+            shapeType=p.GEOM_SPHERE,
+            radius=scale,
+            rgbaColor=color
+        )
+        p.createMultiBody(baseVisualShapeIndex=visual_shape, basePosition=position)
 '''
 
-for _ in range(100):
-    p.stepSimulation()
-    time.sleep(1./240.)
+for i in range(5):
+
+    #------ CUBE -----------#
+    cube_height = 0.05  # half-height
+
+    cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
 
+    CUBE = CubeObject(f"Cube{i+1}", pos=[0.0,0.0,0.5], orientation=cube_start_orientation)
+
+    # let cube fall to place
+    for _ in range(100):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+    ## CHECK CUBE POS
+    cube_pos, _ = p.getBasePositionAndOrientation(CUBE.body_id)
+    #print(f"CUBE POS: {cube_pos}")
+    #spawn_marker(cube_pos)
 
 
-# Keep GUI open
-for _ in range(500):
-    p.stepSimulation()
-    time.sleep(1./240.)
+    # ------------------- PR2 Gripper ------------------- #
 
+    # error with this pos??
+    #gripper_start_pos = [0.5, 0.1, 0.05]  # always give z >= 0.04
+    #gripper_start_pos = [0, 0.0, 0.5]
+    #gripper_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+
+    pr2_gripper = SimGripper("pr2_gripper.urdf", pos=None, target_obj=CUBE)
+
+
+    # Open fingers initially
+    joint_positions = [0.550569, 0.0, 0.549657, 0.0]
+    for i, pos in enumerate(joint_positions):
+        p.resetJointState(pr2_gripper.body_id, i, pos)
+
+    # ------------------- Pick CUBE ------------------- #
+
+    # Open gripper
+    pr2_gripper.open_gripper()
+    for _ in range(50):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+
+    pr2_gripper.move_towards_obj()
+    for _ in range(250):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+
+    # Close gripper to grasp
+    pr2_gripper.close_gripper()
+    for _ in range(150):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+    CUBE.pos_grab_before, _ = p.getBasePositionAndOrientation(CUBE.body_id)
+
+    # Lift cube
+    pr2_gripper.grab_start_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
+    x, y, z = pr2_gripper.grab_start_pos
+    #print(x,y,z)
+    lift_height = z + 0.3
+
+    pr2_gripper.move_gripper(x, y, lift_height)
+    for _ in range(200):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+    CUBE.pos_grab_after, _ = p.getBasePositionAndOrientation(CUBE.body_id)
+    pr2_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
+
+    for _ in range(100):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+    # remove gripper and cube from world
+    p.removeBody(pr2_gripper.body_id)
+    p.removeBody(CUBE.body_id)
+
+    # print success or fail
+    pr2_gripper.is_success()
+
+    # Keep GUI open
+    for _ in range(200):
+        p.stepSimulation()
+        time.sleep(1./240.)
+
+
+# end
 p.disconnect()
