@@ -172,7 +172,7 @@ count0 = 0
 if __name__ == "__main__":
 
     # ------------------- Setup ------------------- #
-    cid = p.connect(p.DIRECT)
+    cid = p.connect(p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     
     
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
 
     n = 10000
-    data = np.empty((120,8)) # 7 features, 1 output
+    data = np.empty((140,8)) # 7 features, 1 output
 
 
     for i in range(n):
@@ -279,13 +279,13 @@ if __name__ == "__main__":
 
         # print success or fail
         result = pr2_gripper.is_success()
-        if result == 1 and count1<60:
+        if result == 1 and count1<70:
             count1 += 1
             data[(count1+count0-1),:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result])
-        elif result ==0 and count0<60:
+        elif result ==0 and count0<70:
             count0 += 1
             data[(count1+count0-1),:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result])
-        elif count1==60 and count0==60:
+        elif count1==70 and count0==70:
             break
             
         
@@ -311,3 +311,4 @@ if __name__ == "__main__":
     df = pd.DataFrame(data, columns=cols)
 
     print(df)
+    df.to_csv("trainingdata.csv",index=False)
