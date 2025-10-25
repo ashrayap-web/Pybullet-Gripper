@@ -144,7 +144,9 @@ class SimGripper:
         #dist_diff = np.linalg.norm(dist_diff_vec)
         dist_diff = dist_diff_vec[2]  # height
 
-        if dist_diff < 0.01:
+        _, angular_vel = p.getBaseVelocity(self.OBJ.body_id)
+
+        if dist_diff < 0.01 and np.linalg.norm(angular_vel) < 0.05:
             print(f"\033[32m{self.OBJ.name}: SUCCESS\033[0m")
             return 1.0
         else:
@@ -293,5 +295,6 @@ if __name__ == "__main__":
     cols = ["x","y","z","qx","qy","qz","qw","Result"]
 
     df = pd.DataFrame(data, columns=cols)
+    print(df.head())
 
-    print(df)
+    df.to_csv("poses_dataset.csv", index=False)
