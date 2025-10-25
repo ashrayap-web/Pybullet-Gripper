@@ -99,7 +99,7 @@ class SimGripper:
     # ------------------- Helper Functions ------------------- #
     def close_gripper(self):
         for joint in [0,2]:
-            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=4, force=10)
+            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=2, force=10)
 
     def open_gripper(self):
         for joint in [0,2]:
@@ -146,7 +146,7 @@ class SimGripper:
 
         _, angular_vel = p.getBaseVelocity(self.OBJ.body_id)
 
-        if dist_diff < 0.01 and np.linalg.norm(angular_vel) < 0.05:
+        if dist_diff < 0.01 and np.linalg.norm(angular_vel) < 0.15:
             print(f"\033[32m{self.OBJ.name}: SUCCESS\033[0m")
             return 1.0
         else:
@@ -169,7 +169,8 @@ def spawn_marker(position, scale=0.01, color=[0, 0, 0, 1]):
 if __name__ == "__main__":
 
     # ------------------- Setup ------------------- #
-    cid = p.connect(p.GUI)
+    #cid = p.connect(p.GUI)
+    cid = p.connect(p.DIRECT)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
    
 
@@ -185,7 +186,7 @@ if __name__ == "__main__":
     p.setPhysicsEngineParameter(numSolverIterations=300, erp=0.3, contactERP=0.3)
 
 
-    n = 30
+    n = 3000
     data = np.empty((n,8)) # 7 features, 1 output
 
 
@@ -203,13 +204,13 @@ if __name__ == "__main__":
 
         cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
-
-        CUBE = CubeObject(f"Cube{i+1}", pos=[0.0,0.0,0.1], orientation=cube_start_orientation)
+                                             # cube min height
+        CUBE = CubeObject(f"Cube{i+1}", pos=[0.0,0.0,0.03], orientation=cube_start_orientation)
 
         # let cube fall to place
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
         ## CHECK CUBE POS
         cube_pos, _ = p.getBasePositionAndOrientation(CUBE.body_id)
@@ -236,20 +237,20 @@ if __name__ == "__main__":
         pr2_gripper.open_gripper()
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
 
         pr2_gripper.move_towards_obj()
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
 
         # Close gripper to grasp
         pr2_gripper.close_gripper()
-        for _ in range(50):
+        for _ in range(100):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
         CUBE.pos_grab_before, _ = p.getBasePositionAndOrientation(CUBE.body_id)
 
@@ -262,12 +263,12 @@ if __name__ == "__main__":
         pr2_gripper.move_gripper(x, y, lift_height)
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
         # wait 3s - 720
-        for _ in range(120):
+        for _ in range(720):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
         CUBE.pos_grab_after, _ = p.getBasePositionAndOrientation(CUBE.body_id)
         pr2_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
@@ -285,7 +286,7 @@ if __name__ == "__main__":
         # Keep GUI open
         for _ in range(50):
             p.stepSimulation()
-            time.sleep(1./240.)
+            #time.sleep(1./240.)
 
 
     # end
@@ -296,5 +297,7 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(data, columns=cols)
     print(df.head())
+
+    print(df["Result"].value_counts())
 
     df.to_csv("poses_dataset.csv", index=False)
