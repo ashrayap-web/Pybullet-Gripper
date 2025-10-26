@@ -186,9 +186,9 @@ if __name__ == "__main__":
     p.setPhysicsEngineParameter(numSolverIterations=300, erp=0.3, contactERP=0.3)
 
 
-    n = 3000
-    data = np.empty((n,8)) # 7 features, 1 output
-
+    n = 10000
+    data = np.empty((n,7)) # 6 features (7 if quaternions), 1 output
+    # disclude roll since mostly 0?
 
     for i in range(n):
 
@@ -277,7 +277,8 @@ if __name__ == "__main__":
         result = pr2_gripper.is_success()
 
         ### ADD POSE TO DATASET
-        data[i,:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result])
+        euler_angles = p.getEulerFromQuaternion(pr2_gripper.orientation)
+        data[i,:] = np.hstack([pr2_gripper.start_pos, euler_angles, result])
 
         # remove gripper and cube from world
         #p.removeBody(pr2_gripper.body_id)
@@ -293,11 +294,12 @@ if __name__ == "__main__":
     p.disconnect()
 
 
-    cols = ["x","y","z","qx","qy","qz","qw","Result"]
+    #cols = ["x","y","z","qx","qy","qz","qw","Result"]
+    cols = ["x","y","z","roll","pitch","yaw","Result"]
 
     df = pd.DataFrame(data, columns=cols)
     print(df.head())
 
     print(df["Result"].value_counts())
 
-    df.to_csv("poses_dataset.csv", index=False)
+    df.to_csv("poses_dataset_euler.csv", index=False)
