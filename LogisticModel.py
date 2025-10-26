@@ -21,18 +21,24 @@ X = balanced_df.drop(columns=["Result"])
 y = balanced_df["Result"]
 #print(y.head())
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, stratify=y, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
 model = make_pipeline(
-    PolynomialFeatures(degree=5),
+    PolynomialFeatures(degree=6),
     StandardScaler(),
-    LogisticRegression(max_iter=1000)
+    LogisticRegression(penalty="l2", C=10.0, max_iter=10000)  # lower C -> stricter regularization
 )
 
+# train
 model.fit(X_train, y_train)
 
-y_pred = model.predict(X_test)
 
-print("Accuracy:", accuracy_score(y_test, y_pred),"\n")
-print("Confusion Matrix", confusion_matrix(y_test, y_pred),"\n")
-print("Classification Report", classification_report(y_test, y_pred),"\n")
+# test
+y_train_pred = model.predict(X_train)
+y_test_pred = model.predict(X_test)
+
+print("Train Accuracy:", accuracy_score(y_train, y_train_pred),"\n")
+print("Test Accuracy:", accuracy_score(y_test, y_test_pred),"\n")
+
+print("Confusion Matrix", confusion_matrix(y_test, y_test_pred),"\n")
+print("Classification Report", classification_report(y_test, y_test_pred),"\n")
