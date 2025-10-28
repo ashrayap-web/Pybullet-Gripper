@@ -277,8 +277,8 @@ if __name__ == "__main__":
         result = pr2_gripper.is_success()
 
         ### ADD POSE TO DATASET
-        euler_angles = p.getEulerFromQuaternion(pr2_gripper.orientation)
-        data[i,:] = np.hstack([pr2_gripper.start_pos, euler_angles, result])
+        #euler_angles = p.getEulerFromQuaternion(pr2_gripper.orientation)
+        data[i,:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result]) #euler_angles
 
         # remove gripper and cube from world
         #p.removeBody(pr2_gripper.body_id)
@@ -294,8 +294,8 @@ if __name__ == "__main__":
     p.disconnect()
 
 
-    #cols = ["x","y","z","qx","qy","qz","qw","Result"]
-    cols = ["x","y","z","roll","pitch","yaw","Result"]
+    cols = ["x","y","z","qx","qy","qz","qw","Result"]
+    #cols = ["x","y","z","roll","pitch","yaw","Result"]
 
     df = pd.DataFrame(data, columns=cols)
     print(df.head())
