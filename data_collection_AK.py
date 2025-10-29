@@ -11,25 +11,30 @@ from abc import ABC, abstractmethod
 
 class SimObject:
 
-    def __init__(self, name, urdf_file=None, pos=None, orientation=None):
+    def __init__(self, name, urdf_file=None, pos=None, orientation=None, scale=1.0):
        
         self.name = name
         self.pos = pos
         self.orientation = orientation
 
-        self.body_id = p.loadURDF(urdf_file, basePosition=self.pos, baseOrientation=self.orientation)
+        self.body_id = p.loadURDF(urdf_file, basePosition=self.pos, baseOrientation=self.orientation, globalScaling=scale)
 
         self.pos_grab_before = None
         self.pos_grab_after = None
 
 class CubeObject(SimObject):
-    def __init__(self, name, urdf_file="cube_small.urdf", pos=None, orientation=None):
-        super().__init__(name, urdf_file, pos, orientation)
+    def __init__(self, name, urdf_file="cube_small.urdf", pos=None, orientation=None, scale=1.0):
+        super().__init__(name, urdf_file, pos, orientation, scale)
 
 
 class SphereObject(SimObject):
-    def __init__(self, name, urdf_file="sphere.urdf", pos=None, orientation=None):
-        super().__init__(name, urdf_file, pos, orientation)
+    def __init__(self, name, urdf_file="sphere.urdf", pos=None, orientation=None, scale=1.0):
+        super().__init__(name, urdf_file, pos, orientation, scale)
+
+
+class CylinderObject(SimObject):
+    def __init__(self, name, urdf_file="cylinder.urdf", pos=None, orientation=None, scale=0.63):
+        super().__init__(name, urdf_file, pos, orientation, scale)
 
 
 class SimGripper(ABC):
@@ -69,18 +74,18 @@ class PR2Gripper(SimGripper):
        
         self.OBJ = target_obj
 
-        if pos is None:
-            self.start_pos = np.array([random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(0.4, 1)])
-        else:
-            self.start_pos = np.array(pos)
+        self.start_pos = np.array(pos if pos is not None else
+                            [random.uniform(-1, 1), 
+                            random.uniform(-1, 1), 
+                            random.uniform(0.6, 1)
+                            ], dtype=float)
+        
 
-       
-        if orientation is None:
-            self.orientation = np.array(self.set_orientation())
-        else:
-            self.orientation = np.array(orientation)
+        self.orientation = np.array(orientation if orientation is not None else
+                                    self.set_orientation(), dtype=float)
+        
 
-        self.body_id = p.loadURDF(urdf_file, basePosition=self.start_pos, baseOrientation=self.orientation)
+        self.body_id = p.loadURDF(urdf_file, basePosition=self.start_pos.tolist(), baseOrientation=self.orientation.tolist())
 
         # Fix gripper with a constraint
         self.pr2_cid = p.createConstraint(
@@ -91,9 +96,9 @@ class PR2Gripper(SimGripper):
             jointType=p.JOINT_FIXED,
             jointAxis=[0, 0, 0],
             parentFramePosition=[0,0,0],
-            childFramePosition= self.start_pos,
+            childFramePosition= self.start_pos.tolist(),
             parentFrameOrientation = [0,0,0,1],
-            childFrameOrientation = self.orientation
+            childFrameOrientation = self.orientation.tolist()
         )
 
         self.grab_start_pos = None
@@ -107,8 +112,8 @@ class PR2Gripper(SimGripper):
         d_vector = np.array(obj_pos) - self.start_pos # vector from gripper to obj
         dx, dy, dz = d_vector
 
-       
-        if np.abs(dx) and np.abs(dy) < 1e-3:
+        tolerance = 1e-3
+        if np.abs(dx) < tolerance and np.abs(dy) < tolerance:
             roll = -np.pi/2
             yaw = 0
             pitch = np.pi/2
@@ -133,7 +138,7 @@ class PR2Gripper(SimGripper):
 
     def open_gripper(self):
         for joint in [0,2]:
-            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.95, maxVelocity=1, force=10)
+            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.95, maxVelocity=2, force=10)
 
 
     def move_gripper(self, x, y, z, force=80):
@@ -188,6 +193,8 @@ class PR2Gripper(SimGripper):
 
 if __name__ == "__main__":
 
+    COLLECT_DATA = False
+
     # ------------------- Setup ------------------- #
     cid = p.connect(p.GUI)
     #cid = p.connect(p.DIRECT)
@@ -207,7 +214,7 @@ if __name__ == "__main__":
 
 
     n = 10000
-    data = np.empty((n,7)) # 6 features (7 if quaternions), 1 output
+    data = np.empty((n,8)) # 6 features (7 if quaternions), + 1 output
     # disclude roll since mostly 0?
 
     for i in range(n):
@@ -220,31 +227,38 @@ if __name__ == "__main__":
         p.loadURDF("plane.urdf")
 
         #------ CUBE -----------#
-        cube_height = 0.05  # half-height
-
-        cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-
+        #cube_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        #cube_z = 0.03
                                              # cube min height
-        CUBE = CubeObject(f"Cube{i+1}", pos=[0.0,0.0,0.03], orientation=cube_start_orientation)
+        #CUBE = CubeObject(f"Cube{i+1}", pos=[0.0,0.0,cube_z], orientation=cube_start_orientation)
 
-        # let cube fall to place
+
+        #------ Cylinder -----------#
+
+        cylinder_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        cylinder_z = 0.06
+                                             # cube min height
+        CYLINDER = CylinderObject(f"Cylinder{i+1}", pos=[0.0,0.0, cylinder_z], orientation=cylinder_start_orientation)
+
+        # ------- SET CURRENT OBJECT --------#
+        current_obj = CYLINDER
+
+        # let object fall to place
         for _ in range(50):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
         ## CHECK CUBE POS
-        cube_pos, _ = p.getBasePositionAndOrientation(CUBE.body_id)
-        #print(f"CUBE POS: {cube_pos}")
+        obj_pos, _ = p.getBasePositionAndOrientation(current_obj.body_id)
 
 
         # ------------------- PR2 Gripper ------------------- #
 
         # error with this pos??
-        #gripper_start_pos = [0.5, 0.1, 0.05]  # always give z >= 0.04
-        #gripper_start_pos = [0, 0.0, 0.5]
+        #gripper_start_pos = [0.5, 0.1, 0.09]  # always give z >= 0.04
         #gripper_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
 
-        pr2_gripper = SimGripper("pr2_gripper.urdf", pos=None, target_obj=CUBE)
+        pr2_gripper = PR2Gripper("pr2_gripper.urdf", pos=None, target_obj=current_obj)
 
         # Open fingers initially
         joint_positions = [0.550569, 0.0, 0.549657, 0.0]
@@ -272,7 +286,7 @@ if __name__ == "__main__":
             p.stepSimulation()
             time.sleep(1./240.)
 
-        CUBE.pos_grab_before, _ = p.getBasePositionAndOrientation(CUBE.body_id)
+        current_obj.pos_grab_before, _ = p.getBasePositionAndOrientation(current_obj.body_id)
 
         # Lift cube
         pr2_gripper.grab_start_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
@@ -290,7 +304,7 @@ if __name__ == "__main__":
             p.stepSimulation()
             time.sleep(1./240.)
 
-        CUBE.pos_grab_after, _ = p.getBasePositionAndOrientation(CUBE.body_id)
+        current_obj.pos_grab_after, _ = p.getBasePositionAndOrientation(current_obj.body_id)
         pr2_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
 
         # print success or fail
@@ -319,4 +333,5 @@ if __name__ == "__main__":
 
     print(df["Result"].value_counts())
 
-    df.to_csv("poses_dataset_euler.csv", index=False)
+    if COLLECT_DATA:
+        df.to_csv("poses_dataset_euler.csv", index=False)
