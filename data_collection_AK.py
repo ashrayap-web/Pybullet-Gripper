@@ -6,6 +6,8 @@ import math
 import numpy as np
 import pandas as pd
 
+from abc import ABC, abstractmethod
+
 
 class SimObject:
 
@@ -30,8 +32,36 @@ class SphereObject(SimObject):
         super().__init__(name, urdf_file, pos, orientation)
 
 
+class SimGripper(ABC):
+    def __init__(self):
+        pass
 
-class SimGripper:
+    @abstractmethod
+    def set_orientation(self):
+        pass
+    
+    @abstractmethod
+    def close_gripper(self):
+        pass
+    
+    @abstractmethod
+    def open_gripper(self):
+        pass
+
+    @abstractmethod
+    def move_gripper(self, x, y, z, force=80):
+        pass
+
+    @abstractmethod
+    def move_towards_obj(self):
+       pass
+
+    @abstractmethod
+    def is_success(self):
+        pass
+
+
+class PR2Gripper(SimGripper):
 
     def __init__(self, urdf_file, pos=None, orientation=None, target_obj=None):
 
@@ -154,23 +184,13 @@ class SimGripper:
             return 0.0
 
 
-## ------ UTILITY ------##
-'''
-def spawn_marker(position, scale=0.01, color=[0, 0, 0, 1]):
-    if position:
-        visual_shape = p.createVisualShape(
-            shapeType=p.GEOM_SPHERE,
-            radius=scale,
-            rgbaColor=color
-        )
-        p.createMultiBody(baseVisualShapeIndex=visual_shape, basePosition=position)
-'''
+#----------SIM LOOP--------------#
 
 if __name__ == "__main__":
 
     # ------------------- Setup ------------------- #
-    #cid = p.connect(p.GUI)
-    cid = p.connect(p.DIRECT)
+    cid = p.connect(p.GUI)
+    #cid = p.connect(p.DIRECT)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
    
 
@@ -237,20 +257,20 @@ if __name__ == "__main__":
         pr2_gripper.open_gripper()
         for _ in range(50):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
 
         pr2_gripper.move_towards_obj()
         for _ in range(50):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
 
         # Close gripper to grasp
         pr2_gripper.close_gripper()
         for _ in range(100):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
         CUBE.pos_grab_before, _ = p.getBasePositionAndOrientation(CUBE.body_id)
 
@@ -263,12 +283,12 @@ if __name__ == "__main__":
         pr2_gripper.move_gripper(x, y, lift_height)
         for _ in range(50):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
         # wait 3s - 720
         for _ in range(720):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
         CUBE.pos_grab_after, _ = p.getBasePositionAndOrientation(CUBE.body_id)
         pr2_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
@@ -280,14 +300,11 @@ if __name__ == "__main__":
         #euler_angles = p.getEulerFromQuaternion(pr2_gripper.orientation)
         data[i,:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result]) #euler_angles
 
-        # remove gripper and cube from world
-        #p.removeBody(pr2_gripper.body_id)
-        #p.removeBody(CUBE.body_id)
 
         # Keep GUI open
         for _ in range(50):
             p.stepSimulation()
-            #time.sleep(1./240.)
+            time.sleep(1./240.)
 
 
     # end
