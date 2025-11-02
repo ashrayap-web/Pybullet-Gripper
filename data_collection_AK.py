@@ -22,6 +22,7 @@ class SimObject:
         self.pos_grab_before = None
         self.pos_grab_after = None
 
+
 class CubeObject(SimObject):
     def __init__(self, name, urdf_file="cube_small.urdf", pos=None, orientation=None, scale=1.0):
         super().__init__(name, urdf_file, pos, orientation, scale)
@@ -33,8 +34,11 @@ class SphereObject(SimObject):
 
 
 class CylinderObject(SimObject):
-    def __init__(self, name, urdf_file="cylinder.urdf", pos=None, orientation=None, scale=0.63):
+    def __init__(self, name, urdf_file="cylinder.urdf", pos=None, orientation=None, scale=0.55):
         super().__init__(name, urdf_file, pos, orientation, scale)
+
+        p.changeDynamics(self.body_id, -1, lateralFriction=1.0)
+
 
 
 class SimGripper(ABC):
@@ -133,8 +137,14 @@ class PR2Gripper(SimGripper):
 
     # ------------------- Helper Functions ------------------- #
     def close_gripper(self):
+
+        if isinstance(self.OBJ, CubeObject):
+            f = 10
+        elif isinstance(self.OBJ, CylinderObject):
+            f = 10
+
         for joint in [0,2]:
-            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=2, force=10)
+            p.setJointMotorControl2(self.body_id, joint, p.POSITION_CONTROL, targetPosition=0.1, maxVelocity=2, force=f)
 
     def open_gripper(self):
         for joint in [0,2]:
@@ -172,10 +182,10 @@ class PR2Gripper(SimGripper):
 
 
     def is_success(self):
-        start_pos_cube = np.array(self.OBJ.pos_grab_before)
-        end_pos_cube = np.array(self.OBJ.pos_grab_after)
+        start_pos_obj = np.array(self.OBJ.pos_grab_before)
+        end_pos_obj = np.array(self.OBJ.pos_grab_after)
 
-        dist_diff_vec = (np.array(self.grab_end_pos) - np.array(self.grab_start_pos)) - (end_pos_cube - start_pos_cube)
+        dist_diff_vec = (np.array(self.grab_end_pos) - np.array(self.grab_start_pos)) - (end_pos_obj - start_pos_obj)
         #dist_diff = np.linalg.norm(dist_diff_vec)
         dist_diff = dist_diff_vec[2]  # height
 
@@ -254,65 +264,64 @@ if __name__ == "__main__":
 
         # ------------------- PR2 Gripper ------------------- #
 
-        # error with this pos??
-        #gripper_start_pos = [0.5, 0.1, 0.09]  # always give z >= 0.04
-        #gripper_start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        #pos0 = [-0.5, 0.0, 0.09]  # always give z >= 0.04
+        #o = p.getQuaternionFromEuler([0, 0, 0])
 
-        pr2_gripper = PR2Gripper("pr2_gripper.urdf", pos=None, target_obj=current_obj)
+        curr_gripper = PR2Gripper("pr2_gripper.urdf", pos=None, orientation=None, target_obj=current_obj)
 
         # Open fingers initially
         joint_positions = [0.550569, 0.0, 0.549657, 0.0]
         for joint_idx, pos in enumerate(joint_positions):
-            p.resetJointState(pr2_gripper.body_id, joint_idx, pos)
+            p.resetJointState(curr_gripper.body_id, joint_idx, pos)
 
         # ------------------- Pick CUBE ------------------- #
 
         # Open gripper
-        pr2_gripper.open_gripper()
+        curr_gripper.open_gripper()
         for _ in range(50):
             p.stepSimulation()
             time.sleep(1./240.)
 
 
-        pr2_gripper.move_towards_obj()
+        curr_gripper.move_towards_obj()
         for _ in range(50):
             p.stepSimulation()
             time.sleep(1./240.)
 
 
         # Close gripper to grasp
-        pr2_gripper.close_gripper()
-        for _ in range(100):
+        curr_gripper.close_gripper()
+        for _ in range(150):
             p.stepSimulation()
             time.sleep(1./240.)
 
         current_obj.pos_grab_before, _ = p.getBasePositionAndOrientation(current_obj.body_id)
 
         # Lift cube
-        pr2_gripper.grab_start_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
-        x, y, z = pr2_gripper.grab_start_pos
+        curr_gripper.grab_start_pos, _ = p.getBasePositionAndOrientation(curr_gripper.body_id)
+        x, y, z = curr_gripper.grab_start_pos
         #print(x,y,z)
         lift_height = z + 0.3
 
-        pr2_gripper.move_gripper(x, y, lift_height)
+        curr_gripper.move_gripper(x, y, lift_height)
         for _ in range(50):
             p.stepSimulation()
             time.sleep(1./240.)
 
         # wait 3s - 720
-        for _ in range(720):
+        for _ in range(120):
             p.stepSimulation()
             time.sleep(1./240.)
 
         current_obj.pos_grab_after, _ = p.getBasePositionAndOrientation(current_obj.body_id)
-        pr2_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(pr2_gripper.body_id)
+        curr_gripper.grab_end_pos, _ = p.getBasePositionAndOrientation(curr_gripper.body_id)
 
         # print success or fail
-        result = pr2_gripper.is_success()
+        result = curr_gripper.is_success()
 
         ### ADD POSE TO DATASET
-        #euler_angles = p.getEulerFromQuaternion(pr2_gripper.orientation)
-        data[i,:] = np.hstack([pr2_gripper.start_pos, pr2_gripper.orientation, result]) #euler_angles
+        #euler_angles = p.getEulerFromQuaternion(curr_gripper.orientation)
+        data[i,:] = np.hstack([curr_gripper.start_pos, curr_gripper.orientation, result]) #euler_angles
 
 
         # Keep GUI open
