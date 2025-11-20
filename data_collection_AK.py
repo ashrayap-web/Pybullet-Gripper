@@ -225,7 +225,6 @@ if __name__ == "__main__":
 
     n = 10000
     data = np.empty((n,8)) # 6 features (7 if quaternions), + 1 output
-    # disclude roll since mostly 0?
 
     for i in range(n):
 
@@ -300,7 +299,6 @@ if __name__ == "__main__":
         # Lift cube
         curr_gripper.grab_start_pos, _ = p.getBasePositionAndOrientation(curr_gripper.body_id)
         x, y, z = curr_gripper.grab_start_pos
-        #print(x,y,z)
         lift_height = z + 0.3
 
         curr_gripper.move_gripper(x, y, lift_height)
@@ -320,8 +318,7 @@ if __name__ == "__main__":
         result = curr_gripper.is_success()
 
         ### ADD POSE TO DATASET
-        #euler_angles = p.getEulerFromQuaternion(curr_gripper.orientation)
-        data[i,:] = np.hstack([curr_gripper.start_pos, curr_gripper.orientation, result]) #euler_angles
+        data[i,:] = np.hstack([curr_gripper.start_pos, curr_gripper.orientation, result])
 
 
         # Keep GUI open
@@ -335,7 +332,6 @@ if __name__ == "__main__":
 
 
     cols = ["x","y","z","qx","qy","qz","qw","Result"]
-    #cols = ["x","y","z","roll","pitch","yaw","Result"]
 
     df = pd.DataFrame(data, columns=cols)
     print(df.head())
