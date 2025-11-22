@@ -259,9 +259,9 @@ if __name__ == "__main__":
         
         #-------------Choosing the gripper------------#
     
-        #curr_gripper = ThreeFingerHand("./threeFingers/sdh/sdh.urdf", pos=None, orientation=None, target_obj=current_obj)
+        curr_gripper = ThreeFingerHand("./threeFingers/sdh/sdh.urdf", pos=None, orientation=None, target_obj=current_obj)
         
-        curr_gripper = PR2Gripper("pr2_gripper.urdf", pos=None, orientation=None, target_obj=current_obj)
+        #curr_gripper = PR2Gripper("pr2_gripper.urdf", pos=None, orientation=None, target_obj=current_obj)
         
         # ---------------------------------------------------
 
