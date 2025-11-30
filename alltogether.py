@@ -36,7 +36,7 @@ class CylinderObject(SimObject):
 # ---------------------------------------------------------
 
 class SimGripper(ABC):
-    def __init__(self, urdf_file, pos=None, orientation=None, target_obj=None):
+    def __init__(self, pos=None, target_obj=None):
         self.OBJ = target_obj
         self.start_pos = np.array(pos if pos is not None else [random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(0.6, 1)], dtype=float)
         self.grab_start_pos = None
@@ -91,7 +91,7 @@ class SimGripper(ABC):
 # ---------------------------------------------------------
 class PR2Gripper(SimGripper):
     def __init__(self, urdf_file, pos=None, orientation=None, target_obj=None):
-        super().__init__(urdf_file, pos, orientation, target_obj)
+        super().__init__(pos, target_obj)
         self.orientation = np.array(orientation if orientation is not None else self.set_orientation(), dtype=float)
         self.body_id = p.loadURDF(urdf_file, basePosition=self.start_pos.tolist(), baseOrientation=self.orientation.tolist())
         self.cid = p.createConstraint(self.body_id, -1, -1, -1, p.JOINT_FIXED, [0, 0, 0], [0,0,0], self.start_pos.tolist(), [0,0,0,1], self.orientation.tolist())
@@ -127,7 +127,7 @@ class ThreeFingerHand(SimGripper):
     UPPER_JOINTS = [3, 6, 9]
 
     def __init__(self, urdf_file, pos=None, orientation=None, target_obj=None):
-        super().__init__(urdf_file, pos, orientation, target_obj)
+        super().__init__(pos, target_obj)
         base_orientation_quat = self.set_orientation()
         TWIST_ANGLE = np.pi / 2 
         twist_quat = p.getQuaternionFromEuler([np.pi/2, 0, TWIST_ANGLE])
@@ -442,33 +442,36 @@ def testphaseloop(object_choice="cylinder", object_urdf="cylinder.urdf",
     
 
 #-------------------------run the loops------------------------------------------#
-# Comment out the trainloop() if you only want to test the 10 random grasps 
-
+# Comment out the trainloop() if you want to use the pre-made training data 
 
 #Run the loop that creates training data 
 trainloop(object_choice="cylinder", object_urdf="cylinder.urdf",gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="testingloop.csv")
 
+#Run this loop that trains the classifier model, then tests new 10 random grasps. Giving a success rate too.
+testphaseloop(object_choice="cylinder", object_urdf="cylinder.urdf",gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="pr2_gripper_cylinder.csv") 
 
-#Run this loop that tests 10 random grasps with trained classifier. Giving a success rate too.
-testphaseloop(object_choice="cylinder", object_urdf="cylinder.urdf",gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="testingloop.csv") 
+'''
+----------------Different parameters you can have ------------------
+If you would like to test the different gripper+object combinations you must
+change the trainloop() and testphaseloop() parameters. 
 
+1. Cylinder + Pr2 gripper
+object_choice="cylinder", object_urdf="cylinder.urdf",
+              gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="pr2_gripper_cylinder.csv"
 
-#----------------Different parameters you can have ------------------#
-#1
-# object_choice="cylinder", object_urdf="cylinder.urdf",
-#               gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="pr2_gripper_cylinder.csv"
+2. Cube + Pr2 gripper
+object_choice="cube", object_urdf="cube_small.urdf",
+              gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="pr2_gripper_cube.csv"
 
-#2
-# object_choice="cube", object_urdf="cube_small.urdf",
-#               gripper_choice="pr2", gripper_urdf="pr2_gripper.urdf",csvfile="pr2_gripper_cube.csv"
+3. Cube + Sdh gripper
+object_choice="cube", object_urdf="cube_small.urdf",
+              gripper_choice="threefinger", gripper_urdf="./threeFingers/sdh/sdh.urdf",csvfile="sdh_gripper_cube.csv"
 
-#3
-# object_choice="cube", object_urdf="cube_small.urdf",
-#               gripper_choice="threefinger", gripper_urdf="./threeFingers/sdh/sdh.urdf",csvfile="sdh_gripper_cube.csv"
+4. Cylinder + Sdh gripper
+object_choice="cylinder", object_urdf="cylinder.urdf",
+              gripper_choice="threefinger", gripper_urdf="./threeFingers/sdh/sdh.urdf",csvfile="sdh_gripper_cylinder.csv"
 
-#4
-# object_choice="cylinder", object_urdf="cylinder.urdf",
-#               gripper_choice="threefinger", gripper_urdf="./threeFingers/sdh/sdh.urdf",csvfile="sdh_gripper_cylinder.csv"
+'''
 
 
 
